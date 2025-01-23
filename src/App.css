@@ -1,0 +1,53 @@
+.App {
+  font-family: Arial, sans-serif;
+  background-color: #f4f4f4;
+  padding: 20px;
+}
+
+h1 {
+  color: #333;
+}
+
+.offer-container {
+  background-color: #fff;
+  margin: 10px 0;
+  padding: 20px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.offer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid #ddd;
+  margin-bottom: 10px;
+}
+
+.offer-header h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #007bff;
+}
+
+.offer-price {
+  font-size: 16px;
+  font-weight: bold;
+  color: #28a745;
+}
+
+.details {
+  margin-top: 15px;
+}
+
+.details div {
+  margin-bottom: 8px;
+}
+
+.details label {
+  font-weight: bold;
+  color: #333;
+}
+
+input[type="file"] {
+  margin-bottom: 20px;
+}
