@@ -1,95 +1,194 @@
 import React, { useState } from 'react';
-import './App.css';
 
 function App() {
   const [offers, setOffers] = useState([]);
-  
-  // Function to parse XML file
-  function parseXML(xmlText) {
+
+  // Function to parse XML
+  const parseXML = (xmlText) => {
     const parser = new DOMParser();
-    return parser.parseFromString(xmlText, "text/xml");
-  }
+    return parser.parseFromString(xmlText, 'application/xml');
+  };
 
-  // Function to display offers from the parsed XML
-  function displayOffers(xmlDoc) {
-    const offers = xmlDoc.getElementsByTagName('Offer');
-    const offerList = [];
+  // Function to extract and combine offers
+  const extractOffers = (xmlDoc) => {
+    const ns = "http://www.iata.org/IATA/2015/00/2019.2/IATA_AirShoppingRS";
+    const offerNodes = xmlDoc.getElementsByTagNameNS(ns, 'Offer');
+    const paxSegments = xmlDoc.getElementsByTagNameNS(ns, 'PaxSegment');
+    const extractedOffers = {};
 
-    for (let i = 0; i < offers.length; i++) {
-      const offer = offers[i];
-      const offerItem = offer.getElementsByTagName('OfferItem')[0];
+    Array.from(offerNodes).forEach((offerNode) => {
+      const offerItem = offerNode.getElementsByTagNameNS(ns, 'OfferItem')[0];
+      const fareDetail = offerItem.getElementsByTagNameNS(ns, 'FareDetail')[0];
+      const fareComponent = fareDetail.getElementsByTagNameNS(ns, 'FareComponent')[0];
+      const price = offerItem.getElementsByTagNameNS(ns, 'Price')[0];
 
-      // Extracting details from the XML
-      const cabinTypeCode = offerItem.getElementsByTagName('CabinTypeCode')[0]?.textContent || 'N/A';
-      const cabinTypeName = offerItem.getElementsByTagName('CabinTypeName')[0]?.textContent || 'N/A';
-      const fareBasisCode = offerItem.getElementsByTagName('FareBasisCode')[0]?.textContent || 'N/A';
-      const baseAmount = offerItem.getElementsByTagName('BaseAmount')[0]?.textContent || 'N/A';
-      const totalAmount = offerItem.getElementsByTagName('TotalAmount')[0]?.textContent || 'N/A';
-      const baggageAllowance = offerItem.getElementsByTagName('BaggageAllowance')[0]?.textContent || 'N/A';
-      const offerDate = offerItem.getElementsByTagName('OfferDate')[0]?.textContent || 'N/A';
-      const departureDate = offerItem.getElementsByTagName('DepartureDate')[0]?.textContent || 'N/A';
-      const arrivalDate = offerItem.getElementsByTagName('ArrivalDate')[0]?.textContent || 'N/A';
+      // Extract basic offer details
+      const cabinTypeCode = fareComponent.getElementsByTagNameNS(ns, 'CabinTypeCode')[0]?.textContent || 'N/A';
+      const cabinTypeName = fareComponent.getElementsByTagNameNS(ns, 'CabinTypeName')[0]?.textContent || 'N/A';
+      const fareBasisCode = fareComponent.getElementsByTagNameNS(ns, 'FareBasisCode')[0]?.textContent || 'N/A';
+      const baseAmount = price.getElementsByTagNameNS(ns, 'BaseAmount')[0]?.textContent || '0';
+      const totalAmount = price.getElementsByTagNameNS(ns, 'TotalAmount')[0]?.textContent || '0';
+      const paxSegmentRefID = fareComponent.getElementsByTagNameNS(ns, 'PaxSegmentRefID')[0]?.textContent;
 
-      // Store the offer in the list
-      offerList.push({
-        cabinTypeCode,
-        cabinTypeName,
-        fareBasisCode,
-        baseAmount,
-        totalAmount,
-        baggageAllowance,
-        offerDate,
-        departureDate,
-        arrivalDate,
+      // Locate the PaxSegment
+      let paxSegment = null;
+      Array.from(paxSegments).forEach((segment) => {
+        const segmentID = segment.getElementsByTagNameNS(ns, 'PaxSegmentID')[0]?.textContent;
+        if (segmentID === paxSegmentRefID) {
+          paxSegment = segment;
+        }
       });
-    }
 
-    // Update the state with the offers
-    setOffers(offerList);
-  }
+      if (paxSegment) {
+        const departure = paxSegment.getElementsByTagNameNS(ns, 'Dep')[0];
+        const arrival = paxSegment.getElementsByTagNameNS(ns, 'Arrival')[0];
 
-  // Handle file input and parse XML when selected
-  function handleFileInput(event) {
+        const depDateTime = departure?.getElementsByTagNameNS(ns, 'AircraftScheduledDateTime')[0]?.textContent || 'N/A';
+        const depCode = departure?.getElementsByTagNameNS(ns, 'IATA_LocationCode')[0]?.textContent || 'N/A';
+        const arrDateTime = arrival?.getElementsByTagNameNS(ns, 'AircraftScheduledDateTime')[0]?.textContent || 'N/A';
+        const arrCode = arrival?.getElementsByTagNameNS(ns, 'IATA_LocationCode')[0]?.textContent || 'N/A';
+
+        // Group by Origin and Destination
+        const key = `${depCode}-${arrCode}`;
+        if (!extractedOffers[key]) {
+          extractedOffers[key] = {
+            route: `${depCode} to ${arrCode}`,
+            segments: [],
+            totalBaseAmount: 0,
+            totalAmount: 0,
+          };
+        }
+
+        extractedOffers[key].segments.push({
+          depDateTime,
+          arrDateTime,
+          cabinTypeCode,
+          cabinTypeName,
+          fareBasisCode,
+          baseAmount: parseFloat(baseAmount),
+          totalAmount: parseFloat(totalAmount),
+        });
+
+        extractedOffers[key].totalBaseAmount += parseFloat(baseAmount);
+        extractedOffers[key].totalAmount += parseFloat(totalAmount);
+      }
+    });
+
+    // Convert object to array for easier rendering
+    setOffers(Object.values(extractedOffers));
+  };
+
+  // Handle file input
+  const handleFileInput = (event) => {
     const file = event.target.files[0];
     if (file && file.name.endsWith('.xml')) {
       const reader = new FileReader();
-      reader.onload = function (e) {
-        const xmlText = e.target.result;
-        const xmlDoc = parseXML(xmlText);
-        displayOffers(xmlDoc);
+      reader.onload = (e) => {
+        const xmlDoc = parseXML(e.target.result);
+        extractOffers(xmlDoc);
       };
       reader.readAsText(file);
     } else {
-      alert('Please select a valid XML file.');
+      alert('Please upload a valid XML file.');
     }
-  }
+  };
+  const customStyle = {
+    loopbox: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: '20px'
+    },
+    boxtd: {
+      padding: '5px 10px'
+    },
+    boxtdFirst: {
+      padding: '5px 10px',
+      fontWeight: '600',
+      color: 'rgb(255 157 12)'
+    }
+  };
 
   return (
-    <div className="App">
-      <h1>Flight Offer Details</h1>
-      <input type="file" onChange={handleFileInput} accept=".xml" />
-      <div id="offerList">
+    <div style={{ fontFamily: 'Arial, sans-serif', margin: '20px' }}>
+      <h1 style={{ textAlign: 'center', color: '#4CAF50' }}>Flight Offers</h1>
+      <input 
+        type="file" 
+        accept=".xml" 
+        onChange={handleFileInput} 
+        style={{
+          display: 'block',
+          margin: '20px auto',
+          padding: '10px',
+          fontSize: '16px',
+        }} 
+      />
+      <div>
         {offers.length > 0 ? (
           offers.map((offer, index) => (
-            <div className="offer-container" key={index}>
-              <div className="offer-header">
-                <h2>Offer #{index + 1}</h2>
-                <span className="offer-price">{offer.baseAmount} EUR (Total: {offer.totalAmount} EUR)</span>
-              </div>
-              <div className="details">
-                <div><label>Cabin Type:</label> {offer.cabinTypeCode} - {offer.cabinTypeName}</div>
-                <div><label>Fare Basis Code:</label> {offer.fareBasisCode}</div>
-                <div><label>Base Amount:</label> {offer.baseAmount} EUR</div>
-                <div><label>Total Amount:</label> {offer.totalAmount} EUR</div>
-                <div><label>Baggage Allowance:</label> {offer.baggageAllowance}</div>
-                <div><label>Offer Date:</label> {offer.offerDate}</div>
-                <div><label>Departure Date:</label> {offer.departureDate}</div>
-                <div><label>Arrival Date:</label> {offer.arrivalDate}</div>
+            <div 
+              key={index} 
+              style={{
+                border: '1px solid #ddd',
+                borderRadius: '10px',
+                margin: '20px',
+                padding: '20px',
+                boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
+              }}
+            >
+              <h2 style={{ color: '#2196F3', marginBottom: '10px' }}>Route: {offer.route}</h2>
+              <p><strong>Total Base Price:</strong> {offer.totalBaseAmount.toFixed(2)} EUR</p>
+              <p><strong>Total Price:</strong> {offer.totalAmount.toFixed(2)} EUR</p>
+              <h3 style={{ color: '#FF9800', marginTop: '20px' }}>Flight Segments:</h3>
+              <div style={customStyle.loopbox}>
+                {offer.segments.map((segment, idx) => (
+                  <div
+                    key={idx} 
+                    style={{
+                      background: '#FFF',
+                      padding: '20px',
+                      margin: '0px',
+                      borderRadius: '5px',
+                      width: '25%',
+                      border: '1px solid #eee'
+                    }}
+                  >
+                    <table>
+                      <tbody>
+                        <tr>
+                        <td style={customStyle.boxtdFirst}>Departure:</td>
+                        <td style={customStyle.boxtd}>{segment.depDateTime}</td>
+                        </tr>
+                        <tr>
+                        <td style={customStyle.boxtdFirst}>Arrival:</td>
+                        <td style={customStyle.boxtd}>{segment.arrDateTime}</td>
+                        </tr>
+                        <tr>
+                        <td style={customStyle.boxtdFirst}>Cabin:</td>
+                        <td style={customStyle.boxtd}>{segment.cabinTypeCode} - {segment.cabinTypeName}</td>
+                        </tr>
+                        <tr>
+                        <td style={customStyle.boxtdFirst}>Fare Basis:</td>
+                        <td style={customStyle.boxtd}>{segment.fareBasisCode}</td>
+                        </tr>
+                        <tr>
+                        <td style={customStyle.boxtdFirst}>Base Price:</td>
+                        <td style={customStyle.boxtd}>{segment.baseAmount.toFixed(2)} EUR</td>
+                        </tr>
+                        <tr>
+                        <td style={customStyle.boxtdFirst}>Total Price:</td>
+                        <td style={customStyle.boxtd}>{segment.totalAmount.toFixed(2)} EUR</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
               </div>
             </div>
           ))
         ) : (
-          <p>No offers to display. Please upload an XML file.</p>
+          <p style={{ textAlign: 'center', color: '#666', marginTop: '20px' }}>
+            No offers to display. Upload an XML file to begin.
+          </p>
         )}
       </div>
     </div>
